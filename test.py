@@ -224,5 +224,26 @@ for store in dict_stores:
         / f"{day_indicators.day}_{day_indicators.month}_{day_indicators.year}_{store_formated}.xlsx"
     )
 
-    send_file_email(attachment, [to], subject, body)
-    print("E-mail da Loja {} enviado".format(store))
+    # send_file_email(attachment, [to], subject, body)
+    # print("E-mail da Loja {} enviado".format(store))
+
+invoicing_stores = sales.groupby("Loja")[["Valor Final"]].sum()
+invoicing_stores_year = invoicing_stores.sort_values(
+    by="Valor Final", ascending=False
+)
+
+name_file_year = f"{day_indicators.day}_{day_indicators.month}_{day_indicators.year}_Ranking_Anual.xlsx"
+name_folder_year = Path(r"Backup_Lojas/Ranking_Anual")
+name_folder_year.mkdir(parents=True, exist_ok=True)
+invoicing_stores_year.to_excel(name_folder_year / name_file_year)
+
+sales_day = sales.loc[sales["Data"] == day_indicators, :]
+invoicing_stores_day = sales_day.groupby("Loja")[["Valor Final"]].sum()
+invoicing_stores_day = invoicing_stores_day.sort_values(
+    by="Valor Final", ascending=False
+)
+
+name_file_day = f"{day_indicators.day}_{day_indicators.month}_{day_indicators.year}_Ranking_Dia.xlsx"
+name_folder_day = Path(r"Backup_Lojas/Ranking_Dia")
+name_folder_day.mkdir(parents=True, exist_ok=True)
+invoicing_stores_day.to_excel(name_folder_day / name_file_day)
