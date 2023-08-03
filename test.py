@@ -11,12 +11,12 @@ from config import *
 
 
 def send_file_email(
-    file_path: str | Path,
+    file_path: list[str] | Path,
     email_addresses: Optional[list[str]] = None,
     subject: Optional[str] = None,
     body: Optional[str] = None,
 ):
-    file_path = Path(file_path)
+    list_file_path = file_path
     message = EmailMessage()
     message["From"] = USER_MAIL
     if email_addresses:
@@ -28,17 +28,18 @@ def send_file_email(
         message["Subject"] = subject
     if body:
         message.add_alternative(body, subtype="html")
-    with open(file_path, "rb") as f:
-        ctype, encoding = mimetypes.guess_type(file_path)
-        if ctype is None or encoding is not None:
-            ctype = "application/octet-stream"
-        maintype, subtype = ctype.split("/", 1)
-        message.add_attachment(
-            f.read(),
-            maintype=maintype,
-            subtype=subtype,
-            filename=file_path.name,
-        )
+    for file_path_ in list_file_path:
+        with open(file_path_, "rb") as f:
+            ctype, encoding = mimetypes.guess_type(file_path_)
+            if ctype is None or encoding is not None:
+                ctype = "application/octet-stream"
+            maintype, subtype = ctype.split("/", 1)
+            message.add_attachment(
+                f.read(),
+                maintype=maintype,
+                subtype=subtype,
+                filename=file_path_.name,
+            )
     session = smtplib.SMTP("smtp.gmail.com", 587)
     session.starttls()
     session.login(USER_MAIL, USER_PASS)
@@ -121,7 +122,6 @@ for store in dict_stores:
     name = emails.loc[emails["Loja"] == store, "Gerente"].values[0]
     to = emails.loc[emails["Loja"] == store, "E-mail"].values[0]
     subject = f"OnePage Dia {day_indicators_formated} - Loja {store}"
-    # mail.Body = 'Texto do E-mail'
 
     if invoicing_day >= goal_billing_day:
         color_invoicing_day = "green"
@@ -224,8 +224,8 @@ for store in dict_stores:
         / f"{day_indicators.day}_{day_indicators.month}_{day_indicators.year}_{store_formated}.xlsx"
     )
 
-    # send_file_email(attachment, [to], subject, body)
-    # print("E-mail da Loja {} enviado".format(store))
+    send_file_email([attachment], [to], subject, body)
+    print("E-mail da Loja {} enviado".format(store))
 
 invoicing_stores = sales.groupby("Loja")[["Valor Final"]].sum()
 invoicing_stores_year = invoicing_stores.sort_values(
@@ -247,3 +247,39 @@ name_file_day = f"{day_indicators.day}_{day_indicators.month}_{day_indicators.ye
 name_folder_day = Path(r"Backup_Lojas/Ranking_Dia")
 name_folder_day.mkdir(parents=True, exist_ok=True)
 invoicing_stores_day.to_excel(name_folder_day / name_file_day)
+
+# enviar o e-mail
+
+to_ = emails.loc[emails["Loja"] == "Diretoria", "E-mail"].values[0]
+subject_ = (
+    "Ranking Dia"
+    f" {day_indicators.day}/{day_indicators.month}/{day_indicators.year}"
+)
+
+list_attachment = [
+    Path.cwd() / name_folder_day / name_file_day,
+    Path.cwd() / name_folder_year / name_file_year,
+]
+
+body_board = f"""
+<!DOCTYPE html>
+<html>
+Prezados, bom dia
+
+Melhor loja do Dia em Faturamento: Loja {invoicing_stores_day.index[0]} com Faturamento R${invoicing_stores_day.iloc[0, 0]:.2f}
+Pior loja do Dia em Faturamento: Loja {invoicing_stores_day.index[-1]} com Faturamento R${invoicing_stores_day.iloc[-1, 0]:.2f}
+
+Melhor loja do Ano em Faturamento: Loja {invoicing_stores_year.index[0]} com Faturamento R${invoicing_stores_year.iloc[0, 0]:.2f}
+Pior loja do Ano em Faturamento: Loja {invoicing_stores_year.index[-1]} com Faturamento R${invoicing_stores_year.iloc[-1, 0]:.2f}
+
+Segue em anexo os rankings do ano e do dia de todas as lojas.
+
+Qualquer dúvida estou à disposição.
+
+Att.,
+Portela
+</html>
+"""
+
+send_file_email(list_attachment, [to_], subject_, body_board)
+print("E-mail da Diretoria enviado")
