@@ -1,6 +1,52 @@
 import pandas as pd
 from pathlib import Path
 
+import mimetypes
+import smtplib
+from email.message import EmailMessage
+from pathlib import Path
+from typing import Optional
+
+from config import *
+
+
+def send_file_email(
+    file_path: str | Path,
+    email_addresses: Optional[list[str]] = None,
+    subject: Optional[str] = None,
+    body: Optional[str] = None,
+):
+    file_path = Path(file_path)
+    message = EmailMessage()
+    message["From"] = USER_MAIL
+    if email_addresses:
+        to = ", ".join(email_addresses)
+    else:
+        to = USER_MAIL
+    message["To"] = to
+    if subject:
+        message["Subject"] = subject
+    if body:
+        message.add_alternative(body, subtype="html")
+    with open(file_path, "rb") as f:
+        ctype, encoding = mimetypes.guess_type(file_path)
+        if ctype is None or encoding is not None:
+            ctype = "application/octet-stream"
+        maintype, subtype = ctype.split("/", 1)
+        message.add_attachment(
+            f.read(),
+            maintype=maintype,
+            subtype=subtype,
+            filename=file_path.name,
+        )
+    session = smtplib.SMTP("smtp.gmail.com", 587)
+    session.starttls()
+    session.login(USER_MAIL, USER_PASS)
+    # session.send_message(message)
+    session.sendmail(USER_MAIL, to, message.as_string())
+    session.quit()
+
+
 emails = pd.read_excel(r"data/Emails.xlsx")
 stores = pd.read_csv(r"data/Lojas.csv", sep=";", encoding="latin-1")
 sales = pd.read_excel(r"data/Vendas.xlsx")
@@ -33,3 +79,150 @@ for store in dict_stores:
     local_file = path_backup / store_formated / name_file
 
     dict_stores[store].to_excel(local_file)
+
+
+goal_billing_day = 1000
+goal_billing_year = 1650000
+goal_qtproducts_day = 4
+goal_qtproducts_year = 120
+goal_ticketmean_day = 500
+goal_ticketmean_year = 500
+
+for store in dict_stores:
+    store_formated = store.replace(" ", "_")
+    sales_store = dict_stores[store]
+    sales_store_day = sales_store.loc[sales_store["Data"] == day_indicators, :]
+
+    # faturamento
+    invoicing_year = sales_store["Valor Final"].sum()
+    # print(faturamento_ano)
+    invoicing_day = sales_store_day["Valor Final"].sum()
+    # print(faturamento_dia)
+
+    # diversidade de produtos
+    qt_products_year = len(sales_store["Produto"].unique())
+    # print(qtde_produtos_ano)
+    qt_products_day = len(sales_store_day["Produto"].unique())
+    # print(qtde_produtos_dia)
+
+    # ticket medio
+    value_sales = sales_store.groupby("Código Venda")["Valor Final"].sum()
+    ticket_mean_year = value_sales.mean()
+    # print(ticket_medio_ano)
+    # ticket_medio_dia
+    value_sales_day = sales_store_day.groupby("Código Venda")[
+        "Valor Final"
+    ].sum()
+    ticket_mean_day = value_sales_day.mean()
+    # print(ticket_medio_dia)
+
+    # enviar o e-mail
+
+    name = emails.loc[emails["Loja"] == store, "Gerente"].values[0]
+    to = emails.loc[emails["Loja"] == store, "E-mail"].values[0]
+    subject = f"OnePage Dia {day_indicators_formated} - Loja {store}"
+    # mail.Body = 'Texto do E-mail'
+
+    if invoicing_day >= goal_billing_day:
+        color_invoicing_day = "green"
+    else:
+        color_invoicing_day = "red"
+    if invoicing_year >= goal_billing_year:
+        color_invoicing_year = "green"
+    else:
+        color_invoicing_year = "red"
+    if qt_products_day >= goal_qtproducts_day:
+        color_qt_day = "green"
+    else:
+        color_qt_day = "red"
+    if qt_products_year >= goal_qtproducts_year:
+        color_qt_year = "green"
+    else:
+        color_qt_year = "red"
+    if ticket_mean_day >= goal_ticketmean_day:
+        color_ticket_day = "green"
+    else:
+        color_ticket_day = "red"
+    if ticket_mean_year >= goal_ticketmean_year:
+        color_ticket_year = "green"
+    else:
+        color_ticket_year = "red"
+
+    body = f"""\
+    <!DOCTYPE html>
+    <html>
+    <p>Bom dia, {name}</p>
+
+    <p>O resultado de ontem <strong>({day_indicators_formated})</strong> da <strong>Loja {store}</strong> foi:</p>
+
+    <table>
+      <tr>
+        <th>Indicador</th>
+        <th>Valor Dia</th>
+        <th>Meta Dia</th>
+        <th>Cenário Dia</th>
+      </tr>
+      <tr>
+        <td>Faturamento</td>
+        <td style="text-align: center">R${invoicing_day:.2f}</td>
+        <td style="text-align: center">R${goal_billing_day:.2f}</td>
+        <td style="text-align: center"><font color="{color_invoicing_day}">◙</font></td>
+      </tr>
+      <tr>
+        <td>Diversidade de Produtos</td>
+        <td style="text-align: center">{qt_products_day}</td>
+        <td style="text-align: center">{goal_qtproducts_day}</td>
+        <td style="text-align: center"><font color="{color_qt_day}">◙</font></td>
+      </tr>
+      <tr>
+        <td>Ticket Médio</td>
+        <td style="text-align: center">R${ticket_mean_day:.2f}</td>
+        <td style="text-align: center">R${goal_ticketmean_day:.2f}</td>
+        <td style="text-align: center"><font color="{color_ticket_day}">◙</font></td>
+      </tr>
+    </table>
+    <br>
+    <table>
+      <tr>
+        <th>Indicador</th>
+        <th>Valor Ano</th>
+        <th>Meta Ano</th>
+        <th>Cenário Ano</th>
+      </tr>
+      <tr>
+        <td>Faturamento</td>
+        <td style="text-align: center">R${invoicing_year:.2f}</td>
+        <td style="text-align: center">R${goal_billing_year:.2f}</td>
+        <td style="text-align: center"><font color="{color_invoicing_year}">◙</font></td>
+      </tr>
+      <tr>
+        <td>Diversidade de Produtos</td>
+        <td style="text-align: center">{qt_products_year}</td>
+        <td style="text-align: center">{goal_qtproducts_year}</td>
+        <td style="text-align: center"><font color="{color_qt_year}">◙</font></td>
+      </tr>
+      <tr>
+        <td>Ticket Médio</td>
+        <td style="text-align: center">R${ticket_mean_year:.2f}</td>
+        <td style="text-align: center">R${goal_ticketmean_year:.2f}</td>
+        <td style="text-align: center"><font color="{color_ticket_year}">◙</font></td>
+      </tr>
+    </table>
+
+    <p>Segue em anexo a planilha com todos os dados para mais detalhes.</p>
+
+    <p>Qualquer dúvida estou à disposição.</p>
+    <p>Att., Portela</p>
+    </html>
+    """
+
+    # Anexos (pode colocar quantos quiser):
+    attachment = (
+        Path.cwd()
+        / path_backup
+        / store_formated
+        / f"{day_indicators.day}_{day_indicators.month}_{day_indicators.year}_{store_formated}.xlsx"
+    )
+
+    send_file_email(attachment, [to], subject, body)
+    print("E-mail da Loja {} enviado".format(store))
