@@ -11,7 +11,7 @@ from config import *
 
 
 def send_file_email(
-    file_path: list[str] | Path,
+    file_path: list[str] | list[Path],
     email_addresses: Optional[list[str]] = None,
     subject: Optional[str] = None,
     body: Optional[str] = None,
